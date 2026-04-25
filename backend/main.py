@@ -16,6 +16,7 @@ from db.cost_logger import get_cost_summary
 from db.feedback_writer import get_todays_override, save_check_in
 from db.model import (
     Base,
+    DailyMetric,
     Job,
     ReadinessReportRow,
     TrainingPlanRow,
@@ -504,6 +505,80 @@ def get_override_prompt(user_id: str):
         "already_decided": already_decided,
         "decision": decision,
     }
+
+
+# ── Metrics Endpoint ──────────────────────────────────────────────────────
+
+
+@app.get("/api/metrics/kpi/{user_id}")
+def get_kpi_metrics(
+    user_id: str,
+    days: int = Query(default=14, ge=1, le=365),
+):
+    cutoff = date.today() - timedelta(days=days - 1)
+
+    with get_session() as session:
+        metric_rows = (
+            session.execute(
+                select(DailyMetric)
+                .where(
+                    DailyMetric.user_id == user_id,
+                    DailyMetric.date >= cutoff,
+                )
+                .order_by(DailyMetric.date.asc())
+            )
+            .scalars()
+            .all()
+        )
+        report_rows = (
+            session.execute(
+                select(ReadinessReportRow)
+                .where(
+                    ReadinessReportRow.user_id == user_id,
+                    ReadinessReportRow.report_date >= cutoff,
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    # Index by date string for O(1) lookup
+    metrics_by_date: dict[str, DailyMetric] = {
+        str(r.date): r for r in metric_rows
+    }
+    readiness_by_date: dict[str, int] = {
+        str(r.report_date): r.readiness_score for r in report_rows
+    }
+
+    # Build parallel arrays over every date in the range
+    result: dict[str, list] = {
+        "dates": [],
+        "readiness_scores": [],
+        "hrv_ms": [],
+        "sleep_scores": [],
+        "body_battery_max": [],
+        "acwr": [],
+        "resting_hr": [],
+        "total_steps": [],
+        "active_calories": [],
+    }
+
+    for offset in range(days):
+        d = cutoff + timedelta(days=offset)
+        ds = str(d)
+        m = metrics_by_date.get(ds)
+
+        result["dates"].append(ds)
+        result["readiness_scores"].append(readiness_by_date.get(ds))
+        result["hrv_ms"].append(m.hrv_last_night_ms if m else None)
+        result["sleep_scores"].append(m.sleep_score if m else None)
+        result["body_battery_max"].append(m.body_battery_max if m else None)
+        result["acwr"].append(m.acwr if m else None)
+        result["resting_hr"].append(m.avg_resting_hr if m else None)
+        result["total_steps"].append(m.total_steps if m else None)
+        result["active_calories"].append(m.active_calories if m else None)
+
+    return result
 
 
 # ── Job Endpoints ─────────────────────────────────────────────────────────

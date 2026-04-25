@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Custom Properties ───────────────────────────────────────────── */
+:root {
+    --color-primary-dark: #0f172a;
+    --color-primary-mid: #1e293b;
+    --color-primary-light: #334155;
+    --color-accent: #3b82f6;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-surface: #f8fafc;
+    --color-muted: #94a3b8;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────── */
+body {
+    background-color: #0f172a;
+    font-family: system-ui, sans-serif;
+    color: #f1f5f9;
+}
+
+/* ── Components ──────────────────────────────────────────────────────── */
+@layer components {
+    .card {
+        @apply bg-slate-800 rounded-xl shadow-sm border border-slate-700;
+    }
+
+    .btn-primary {
+        @apply bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition hover:bg-blue-500 active:bg-blue-700;
+    }
+
+    .btn-ghost {
+        @apply bg-transparent text-slate-300 rounded-lg px-4 py-2 text-sm transition hover:bg-slate-700 active:bg-slate-600;
+    }
+
+    .badge {
+        @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+    }
+
+    .badge-success {
+        @apply bg-green-900/60 text-green-400;
+    }
+
+    .badge-warning {
+        @apply bg-amber-900/60 text-amber-400;
+    }
+
+    .badge-danger {
+        @apply bg-red-900/60 text-red-400;
+    }
+
+    .badge-muted {
+        @apply bg-slate-700 text-slate-400;
+    }
+
+    /* ── Training Zone Helpers ───────────────────────────────────────── */
+    .zone-z1 {
+        @apply bg-slate-700 text-slate-300;
+    }
+
+    .zone-z2 {
+        @apply bg-green-900/60 text-green-400;
+    }
+
+    .zone-z3 {
+        @apply bg-yellow-900/60 text-yellow-400;
+    }
+
+    .zone-z4 {
+        @apply bg-orange-900/60 text-orange-400;
+    }
+
+    .zone-z5 {
+        @apply bg-red-900/60 text-red-400;
+    }
+}
