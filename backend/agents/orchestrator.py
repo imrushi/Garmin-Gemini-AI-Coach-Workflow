@@ -9,6 +9,8 @@ from datetime import date
 from uuid import uuid4
 
 from agents.analysis_agent import AnalysisAgent, AnalysisResult
+from agents.planning_agent import PlanningAgent, PlanningResult
+from agents.schemas import ReadinessReport
 from db.model import Job, get_session
 from db.reader import get_user_profile
 
@@ -20,6 +22,7 @@ class PipelineResult:
     user_id: str
     run_date: str
     analysis_result: AnalysisResult | None = None
+    planning_result: PlanningResult | None = None
     error: str | None = None
     success: bool = False
 
@@ -87,9 +90,77 @@ class AgentOrchestrator:
 
         return result
 
-    async def run_full_pipeline(self, user_id: str) -> PipelineResult:
-        # Day 4 will add Planning Agent here
-        return await self.run_analysis(user_id)
+    async def run_planning(
+        self,
+        user_id: str,
+        readiness_report: ReadinessReport,
+        override_choice: str | None = None,
+    ) -> PipelineResult:
+        run_date = str(date.today())
+        result = PipelineResult(user_id=user_id, run_date=run_date)
+        job_id = str(uuid4())
+
+        with get_session() as s:
+            s.add(Job(id=job_id, user_id=user_id, job_type="planning", status="running"))
+
+        profile = get_user_profile(user_id)
+        if profile is None:
+            err = f"No profile found for user {user_id}"
+            with get_session() as s:
+                job = s.get(Job, job_id)
+                if job:
+                    job.status = "failed"
+                    job.error = err
+            result.error = err
+            logger.error(err)
+            return result
+
+        model_str = profile.get(
+            "model_planning", "openrouter/anthropic/claude-sonnet-4.6"
+        )
+
+        try:
+            agent = PlanningAgent(user_id=user_id, model_str=model_str)
+            planning = await agent.run(readiness_report, override_choice)
+            result.planning_result = planning
+            result.success = True
+
+            with get_session() as s:
+                job = s.get(Job, job_id)
+                if job:
+                    job.status = "done"
+                    job.payload = json.dumps({"plan_id": planning.plan_db_id})
+
+            logger.info(
+                "Planning complete for %s: plan_id=%s",
+                user_id,
+                planning.plan_db_id,
+            )
+        except Exception as e:
+            result.error = str(e)
+            with get_session() as s:
+                job = s.get(Job, job_id)
+                if job:
+                    job.status = "failed"
+                    job.error = str(e)
+            logger.exception("Planning failed for %s", user_id)
+
+        return result
+
+    async def run_full_pipeline(
+        self, user_id: str, override_choice: str | None = None
+    ) -> PipelineResult:
+        result = await self.run_analysis(user_id)
+        if not result.success:
+            return result
+
+        planning = await self.run_planning(
+            user_id, result.analysis_result.report, override_choice
+        )
+        result.planning_result = planning.planning_result
+
+        logger.info("Full pipeline complete for %s", user_id)
+        return result
 
 
 orchestrator = AgentOrchestrator()

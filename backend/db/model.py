@@ -71,6 +71,8 @@ class UserProfile(Base):
     max_weekly_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     garmin_email: Mapped[str | None] = mapped_column(String, nullable=True)
     garmin_password: Mapped[str | None] = mapped_column(String, nullable=True)
+    swim_equipment: Mapped[str | None] = mapped_column(String, nullable=True)  # e.g. "pull_buoy,paddles"
+    swim_strokes: Mapped[str | None] = mapped_column(String, nullable=True)    # e.g. "freestyle:expert,breaststroke:expert,backstroke:beginner,butterfly:learning"
     model_analysis: Mapped[str] = mapped_column(
         String, default="openrouter/anthropic/claude-sonnet-4.6"
     )
@@ -218,6 +220,33 @@ class ReadinessReportRow(Base):
     model_used: Mapped[str] = mapped_column(String, nullable=False)
     tokens_in: Mapped[int] = mapped_column(Integer, default=0)
     tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+# ── Training Plans ──────────────────────────────────────────────────────
+
+class TrainingPlanRow(Base):
+    __tablename__ = "training_plans"
+    __table_args__ = (
+        UniqueConstraint("user_id", "valid_from", name="uq_training_plan_user_from"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_to: Mapped[date] = mapped_column(Date, nullable=False)
+    plan_json: Mapped[str] = mapped_column(String, nullable=False)
+    readiness_report_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("readiness_reports.id"), nullable=True
+    )
+    readiness_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    training_gate: Mapped[str | None] = mapped_column(String, nullable=True)
+    override_applied: Mapped[str | None] = mapped_column(String, nullable=True)
+    model_used: Mapped[str | None] = mapped_column(String, nullable=True)
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 

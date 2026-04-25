@@ -16,6 +16,7 @@ _COST_TABLE: list[tuple[str, float, float]] = [
     ("gemini-flash", 0.075, 0.30),
     ("llama", 0.00, 0.00),
     ("mistral", 0.00, 0.00),
+    ("anthropic/claude-sonnet-4.6", 3.00, 15.00),
 ]
 _DEFAULT_INPUT_COST = 1.00
 _DEFAULT_OUTPUT_COST = 3.00

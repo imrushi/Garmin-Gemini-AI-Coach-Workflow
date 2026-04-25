@@ -78,6 +78,8 @@ class ModelClient:
             "messages": full_messages,
             "max_tokens": settings.DEFAULT_MAX_TOKENS,
         }
+        if "claude" in self.config.model_id.lower():
+            body["provider"] = {"order": ["Anthropic"], "allow_fallbacks": False}
         if json_mode:
             body["response_format"] = {"type": "json_object"}
 

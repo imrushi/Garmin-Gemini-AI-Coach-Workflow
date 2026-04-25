@@ -11,6 +11,8 @@ from sqlalchemy import func, select
 
 from db.model import (
     DailyMetric,
+    ReadinessReportRow,
+    TrainingPlanRow,
     UserFeedback,
     UserProfile,
     Workout,
@@ -184,3 +186,50 @@ def get_weeks_to_goal(user_id: str) -> int | None:
         if delta.days <= 0:
             return 0
         return math.ceil(delta.days / 7)
+
+
+def get_latest_readiness_report(user_id: str) -> dict | None:
+    """Return the most recent readiness report as a dict, or None."""
+    with get_session() as s:
+        row = s.execute(
+            select(ReadinessReportRow)
+            .where(ReadinessReportRow.user_id == user_id)
+            .order_by(ReadinessReportRow.report_date.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        report = json.loads(row.report_json)
+        report["_meta"] = {
+            "db_id": row.id,
+            "model_used": row.model_used,
+            "tokens_in": row.tokens_in,
+            "tokens_out": row.tokens_out,
+        }
+        return report
+
+
+def get_current_plan(user_id: str) -> dict | None:
+    """Return the current active training plan as a dict, or None."""
+    with get_session() as s:
+        row = s.execute(
+            select(TrainingPlanRow)
+            .where(
+                TrainingPlanRow.user_id == user_id,
+                TrainingPlanRow.is_current == True,  # noqa: E712
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        plan = json.loads(row.plan_json)
+        plan["_meta"] = {
+            "db_id": row.id,
+            "generated_at": row.generated_at.isoformat() if row.generated_at else None,
+            "model_used": row.model_used,
+            "tokens_in": row.tokens_in,
+            "tokens_out": row.tokens_out,
+            "training_gate": row.training_gate,
+            "override_applied": row.override_applied,
+        }
+        return plan
