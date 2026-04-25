@@ -40,7 +40,10 @@ class ModelClient:
         self.config = config
 
     async def complete(
-        self, messages: list[dict], json_mode: bool = False
+        self,
+        messages: list[dict],
+        json_mode: bool = False,
+        system: str | None = None,
     ) -> ModelResponse:
         logger.debug(
             "Calling %s model=%s", self.config.backend.value, self.config.model_id
@@ -48,9 +51,9 @@ class ModelClient:
         start = time.time()
         try:
             if self.config.backend == ModelBackend.OPENROUTER:
-                resp = await self._call_openrouter(messages, json_mode)
+                resp = await self._call_openrouter(messages, json_mode, system)
             else:
-                resp = await self._call_ollama(messages, json_mode)
+                resp = await self._call_ollama(messages, json_mode, system)
         except httpx.HTTPError as exc:
             raise RuntimeError(
                 f"{self.config.backend.value} request failed: {exc}"
@@ -59,7 +62,7 @@ class ModelClient:
         return resp
 
     async def _call_openrouter(
-        self, messages: list[dict], json_mode: bool
+        self, messages: list[dict], json_mode: bool, system: str | None = None
     ) -> ModelResponse:
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
@@ -67,9 +70,12 @@ class ModelClient:
             "X-Title": "AI Fitness Coach",
             "Content-Type": "application/json",
         }
+        full_messages = list(messages)
+        if system:
+            full_messages.insert(0, {"role": "system", "content": system})
         body: dict = {
             "model": self.config.model_id,
-            "messages": messages,
+            "messages": full_messages,
             "max_tokens": settings.DEFAULT_MAX_TOKENS,
         }
         if json_mode:
@@ -99,13 +105,15 @@ class ModelClient:
         )
 
     async def _call_ollama(
-        self, messages: list[dict], json_mode: bool
+        self, messages: list[dict], json_mode: bool, system: str | None = None
     ) -> ModelResponse:
         body: dict = {
             "model": self.config.model_id,
             "messages": messages,
             "stream": False,
         }
+        if system:
+            body["system"] = system
         if json_mode:
             body["format"] = "json"
 

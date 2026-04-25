@@ -1,15 +1,17 @@
+import json
 import logging
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 
+from agents.orchestrator import orchestrator
 from config import settings
 from db.cost_logger import get_cost_summary
-from db.model import Base, Job, UserProfile, get_engine, get_session
+from db.model import Base, Job, ReadinessReportRow, UserProfile, get_engine, get_session
 
 # ── Lifespan ─────────────────────────────────────────────────────────────
 
@@ -89,6 +91,24 @@ class UpdateProfileRequest(BaseModel):
         return v
 
 
+class RunAnalysisRequest(BaseModel):
+    user_id: str
+    target_date: str | None = None
+
+
+class RunAnalysisResponse(BaseModel):
+    success: bool
+    report_date: str
+    readiness_score: int | None = None
+    readiness_label: str | None = None
+    training_gate: str | None = None
+    narrative: str | None = None
+    flags: list[str] = []
+    tokens_used: int | None = None
+    latency_ms: int | None = None
+    error: str | None = None
+
+
 class ModelConfigRequest(BaseModel):
     model_analysis: str
     model_planning: str
@@ -163,6 +183,86 @@ def update_model_config(user_id: str, body: ModelConfigRequest):
 @app.get("/api/costs/{user_id}")
 def get_costs(user_id: str):
     return get_cost_summary(user_id, days=7)
+
+
+# ── Analysis Endpoints ───────────────────────────────────────────────────
+
+
+@app.post("/api/analysis/run")
+async def run_analysis(body: RunAnalysisRequest):
+    result = await orchestrator.run_analysis(body.user_id, body.target_date)
+    if not result.success or result.analysis_result is None:
+        return RunAnalysisResponse(
+            success=False,
+            report_date=result.run_date,
+            error=result.error or "Unknown error",
+        )
+    ar = result.analysis_result
+    return RunAnalysisResponse(
+        success=True,
+        report_date=result.run_date,
+        readiness_score=ar.report.readiness_score,
+        readiness_label=ar.report.readiness_label.value,
+        training_gate=ar.report.training_gate.value,
+        narrative=ar.report.narrative,
+        flags=ar.report.flags,
+        tokens_used=ar.prompt_tokens + ar.completion_tokens,
+        latency_ms=ar.latency_ms,
+    )
+
+
+@app.get("/api/analysis/report/{user_id}")
+async def get_analysis_report(
+    user_id: str,
+    report_date: str = Query(default=None),
+):
+    rd = report_date or str(date.today())
+    with get_session() as session:
+        row = session.execute(
+            select(ReadinessReportRow).where(
+                ReadinessReportRow.user_id == user_id,
+                ReadinessReportRow.report_date == date.fromisoformat(rd),
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="No report found for this date")
+        return {
+            **json.loads(row.report_json),
+            "model_used": row.model_used,
+            "tokens_in": row.tokens_in,
+            "tokens_out": row.tokens_out,
+        }
+
+
+@app.get("/api/analysis/history/{user_id}")
+async def get_analysis_history(
+    user_id: str,
+    days: int = Query(default=14, ge=1, le=365),
+):
+    cutoff = date.today() - timedelta(days=days)
+    with get_session() as session:
+        rows = (
+            session.execute(
+                select(ReadinessReportRow)
+                .where(
+                    ReadinessReportRow.user_id == user_id,
+                    ReadinessReportRow.report_date >= cutoff,
+                )
+                .order_by(ReadinessReportRow.report_date.desc())
+            )
+            .scalars()
+            .all()
+        )
+        return [
+            {
+                "report_date": str(r.report_date),
+                "readiness_score": r.readiness_score,
+                "readiness_label": r.readiness_label,
+                "training_gate": r.training_gate,
+                "flags": json.loads(r.report_json).get("flags", []),
+            }
+            for r in rows
+        ]
 
 
 @app.get("/api/jobs/{user_id}")

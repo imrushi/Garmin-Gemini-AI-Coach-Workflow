@@ -72,10 +72,10 @@ class UserProfile(Base):
     garmin_email: Mapped[str | None] = mapped_column(String, nullable=True)
     garmin_password: Mapped[str | None] = mapped_column(String, nullable=True)
     model_analysis: Mapped[str] = mapped_column(
-        String, default="openrouter/anthropic/claude-3-5-sonnet"
+        String, default="openrouter/anthropic/claude-sonnet-4.6"
     )
     model_planning: Mapped[str] = mapped_column(
-        String, default="openrouter/google/gemini-flash-1.5"
+        String, default="openrouter/anthropic/claude-sonnet-4.6"
     )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
@@ -197,6 +197,27 @@ class AgentRun(Base):
     success: Mapped[bool] = mapped_column(Boolean, default=True)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
     run_date: Mapped[date] = mapped_column(Date, default=date.today)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+# ── Readiness Reports ────────────────────────────────────────────────────
+
+class ReadinessReportRow(Base):
+    __tablename__ = "readiness_reports"
+    __table_args__ = (
+        UniqueConstraint("user_id", "report_date", name="uq_readiness_user_date"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    report_date: Mapped[date] = mapped_column(Date, nullable=False)
+    readiness_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    readiness_label: Mapped[str] = mapped_column(String, nullable=False)
+    training_gate: Mapped[str] = mapped_column(String, nullable=False)
+    report_json: Mapped[str] = mapped_column(String, nullable=False)
+    model_used: Mapped[str] = mapped_column(String, nullable=False)
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
