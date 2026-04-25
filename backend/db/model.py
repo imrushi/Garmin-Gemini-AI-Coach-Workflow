@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -176,6 +177,42 @@ class Job(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     user: Mapped["User | None"] = relationship(back_populates="jobs")
+
+
+# ── Agent Runs ───────────────────────────────────────────────────────────
+
+class AgentRun(Base):
+    __tablename__ = "agent_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_type: Mapped[str] = mapped_column(String, nullable=False)
+    model_str: Mapped[str] = mapped_column(String, nullable=False)
+    backend: Mapped[str] = mapped_column(String, nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    success: Mapped[bool] = mapped_column(Boolean, default=True)
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    run_date: Mapped[date] = mapped_column(Date, default=date.today)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+# ── Agent Context ────────────────────────────────────────────────────────
+
+class AgentContext(Base):
+    __tablename__ = "agent_context"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    agent_type: Mapped[str] = mapped_column(String, nullable=False)
+    model_used: Mapped[str] = mapped_column(String, nullable=False)
+    context_date: Mapped[date] = mapped_column(Date, default=date.today)
+    context_json: Mapped[str] = mapped_column(String, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 # ── Engine & Session ─────────────────────────────────────────────────────
