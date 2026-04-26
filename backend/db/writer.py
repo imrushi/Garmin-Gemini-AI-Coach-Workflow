@@ -8,13 +8,23 @@ from db.model import DailyMetric, User, UserProfile, Workout, get_session
 from ingestion.normaliser import DailyMetrics
 
 
-def ensure_user(user_id: str, email: str) -> None:
+def ensure_user(user_id: str, email: str) -> str:
+    """Ensure a user exists; return the canonical user_id for this email."""
     with get_session() as session:
+        # 1. Look up by the supplied ID first
         existing = session.get(User, user_id)
         if existing:
-            return
+            return existing.id
+        # 2. Look up by email (may exist with a different ID from the API)
+        existing_by_email = session.execute(
+            select(User).where(User.email == email)
+        ).scalar_one_or_none()
+        if existing_by_email:
+            return existing_by_email.id
+        # 3. Create new user
         session.merge(User(id=user_id, email=email))
         session.merge(UserProfile(user_id=user_id))
+        return user_id
 
 
 def save_daily_metrics(metrics: DailyMetrics) -> str:

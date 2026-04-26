@@ -25,9 +25,10 @@ def main() -> None:
     Base.metadata.create_all(get_engine())
 
     user_id = make_user_id(args.email)
-    ensure_user(user_id, args.email)
+    # ensure_user returns the canonical ID for this email (may differ if user
+    # was created through the API with a UUID rather than the hash)
+    user_id = ensure_user(user_id, args.email)
     print(f"User: {args.email} (id={user_id[:8]}...)")
-
     # Build date list
     if args.date:
         dates = [args.date]

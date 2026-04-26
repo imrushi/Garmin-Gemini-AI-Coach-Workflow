@@ -55,6 +55,12 @@ class GarminClient:
     def get_weight(self, start_date: str, end_date: str):
         return self.client.get_weigh_ins(start_date, end_date)
 
+    def get_training_status(self, date_str: str):
+        return self.client.get_training_status(date_str)
+
+    def get_max_metrics(self, date_str: str):
+        return self.client.get_max_metrics(date_str)
+
     # ── Combined daily fetch ─────────────────────────────────────────────
 
     def fetch_day(self, date_str: str) -> dict:
@@ -66,6 +72,8 @@ class GarminClient:
             "body_battery": lambda: self.get_body_battery(date_str),
             "stress": lambda: self.get_stress(date_str),
             "stats": lambda: self.get_stats(date_str),
+            "training_status": lambda: self.get_training_status(date_str),
+            "max_metrics": lambda: self.get_max_metrics(date_str),
             "activities": lambda: [
                 a
                 for a in self.get_activities(0, 5)
