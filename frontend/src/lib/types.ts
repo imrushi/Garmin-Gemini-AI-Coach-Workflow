@@ -198,12 +198,21 @@ export function readinessToColor(score: number): string {
   return 'text-red-600'
 }
 
-export function sportToEmoji(sport: SportType): string {
-  const map: Record<SportType, string> = {
+export function sportToEmoji(sport: string): string {
+  const map: Record<string, string> = {
+    // abstract plan types
     swim: '🏊', bike: '🚴', run: '🏃', brick: '🚴🏃',
     strength: '💪', yoga: '🧘', active_recovery: '🚶', rest: '😴',
+    // Garmin typeKeys
+    lap_swimming: '🏊', open_water_swimming: '🏊', pool_swimming: '🏊', swimming: '🏊',
+    cycling: '🚴', road_biking: '🚴', road_cycling: '🚴', virtual_ride: '🚴', indoor_cycling: '🚴',
+    mountain_biking: '🚵',
+    running: '🏃', treadmill_running: '🏃', trail_running: '🏃', indoor_running: '🏃',
+    strength_training: '💪',
+    walking: '🚶', hiking: '🥾',
+    bouldering: '🧗', rock_climbing: '🧗',
   }
-  return map[sport] ?? '🏋️'
+  return map[sport] ?? '🏃'
 }
 
 export function formatDuration(min: number | null): string {

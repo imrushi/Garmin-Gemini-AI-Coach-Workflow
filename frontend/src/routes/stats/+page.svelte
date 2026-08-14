@@ -207,7 +207,7 @@
   const zoneBarLabels = $derived.by((): string[] => {
     if (!hrZone) return [];
     return hrZone.workouts.map(
-      (w) => `${w.date.slice(5)} ${sportToEmoji(w.sport as any)}`,
+      (w) => `${w.date.slice(5)} ${sportToEmoji(w.sport)}`,
     );
   });
 
