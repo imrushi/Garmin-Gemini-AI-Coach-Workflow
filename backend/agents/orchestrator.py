@@ -32,7 +32,7 @@ class PipelineResult:
 
 class AgentOrchestrator:
     async def run_analysis(
-        self, user_id: str, target_date: str | None = None
+        self, user_id: str, target_date: str | None = None, pipeline_session_id: str | None = None
     ) -> PipelineResult:
         run_date = target_date or str(date.today())
         result = PipelineResult(user_id=user_id, run_date=run_date)
@@ -61,7 +61,7 @@ class AgentOrchestrator:
 
         # Step 3 — Run Analysis Agent
         try:
-            agent = AnalysisAgent(user_id=user_id, model_str=model_str, session_id=job_id)
+            agent = AnalysisAgent(user_id=user_id, model_str=model_str, session_id=pipeline_session_id or job_id)
             analysis = await agent.run(target_date)
             result.analysis_result = analysis
             result.success = True
@@ -98,6 +98,7 @@ class AgentOrchestrator:
         user_id: str,
         readiness_report: ReadinessReport,
         override_choice: str | None = None,
+        pipeline_session_id: str | None = None,
     ) -> PipelineResult:
         run_date = str(date.today())
         result = PipelineResult(user_id=user_id, run_date=run_date)
@@ -123,7 +124,7 @@ class AgentOrchestrator:
         )
 
         try:
-            agent = PlanningAgent(user_id=user_id, model_str=model_str, session_id=job_id)
+            agent = PlanningAgent(user_id=user_id, model_str=model_str, session_id=pipeline_session_id or job_id)
             planning = await agent.run(readiness_report, override_choice)
             result.planning_result = planning
             result.success = True
@@ -153,7 +154,8 @@ class AgentOrchestrator:
     async def run_full_pipeline(
         self, user_id: str, override_choice: str | None = None, patch_target: str = "tomorrow", sport_override: str | None = None
     ) -> PipelineResult:
-        result = await self.run_analysis(user_id)
+        pipeline_id = str(uuid4())
+        result = await self.run_analysis(user_id, pipeline_session_id=pipeline_id)
         if not result.success:
             return result
 
@@ -186,24 +188,24 @@ class AgentOrchestrator:
                         "Existing plan for %s expired (%s) — generating fresh 7-day plan",
                         user_id, _valid_to,
                     )
-                    planning = await self.run_planning(user_id, report, override_choice)
+                    planning = await self.run_planning(user_id, report, override_choice, pipeline_session_id=pipeline_id)
                 else:
                     logger.info(
                         "Existing plan found for %s — running daily patch (%s)", user_id, patch_target
                     )
                     planning = await self.run_planning_patch(
-                        user_id, report, existing_plan_json, override_choice, patch_target, sport_override
+                        user_id, report, existing_plan_json, override_choice, patch_target, sport_override, pipeline_session_id=pipeline_id
                     )
             except Exception:
                 logger.info(
                     "Existing plan found for %s — running daily patch (%s)", user_id, patch_target
                 )
                 planning = await self.run_planning_patch(
-                    user_id, report, existing_plan_json, override_choice, patch_target, sport_override
+                    user_id, report, existing_plan_json, override_choice, patch_target, sport_override, pipeline_session_id=pipeline_id
                 )
         else:
             logger.info("No existing plan for %s — generating full 7-day plan", user_id)
-            planning = await self.run_planning(user_id, report, override_choice)
+            planning = await self.run_planning(user_id, report, override_choice, pipeline_session_id=pipeline_id)
 
         result.planning_result = planning.planning_result
 
@@ -221,7 +223,7 @@ class AgentOrchestrator:
                     ).scalar_one_or_none()
                     repatch_json = repatch_row.plan_json if repatch_row else None
                 if repatch_json:
-                    await self.run_planning_patch(user_id, report, repatch_json, override_choice, patch_target, sport_override)
+                    await self.run_planning_patch(user_id, report, repatch_json, override_choice, patch_target, sport_override, pipeline_session_id=pipeline_id)
         except Exception:
             logger.exception("Fitness level auto-adjust failed for %s — continuing", user_id)
 
@@ -236,6 +238,7 @@ class AgentOrchestrator:
         override_choice: str | None = None,
         patch_target: str = "tomorrow",
         sport_override: str | None = None,
+        pipeline_session_id: str | None = None,
     ) -> PipelineResult:
         run_date = str(date.today())
         result = PipelineResult(user_id=user_id, run_date=run_date)
@@ -258,7 +261,7 @@ class AgentOrchestrator:
         model_str = profile.get("model_planning", "openrouter/anthropic/claude-sonnet-4.6")
 
         try:
-            agent = PlanningAgent(user_id=user_id, model_str=model_str, session_id=job_id)
+            agent = PlanningAgent(user_id=user_id, model_str=model_str, session_id=pipeline_session_id or job_id)
             planning = await agent.run_patch(readiness_report, current_plan_json, override_choice, patch_target, sport_override)
             result.planning_result = planning
             result.success = True
