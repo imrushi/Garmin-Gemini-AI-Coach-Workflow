@@ -303,6 +303,16 @@ async def trigger_pipeline(body: SchedulerTriggerRequest):
     return {"triggered": True}
 
 
+_TZ_ALIASES: dict[str, str] = {
+    "Asia/Calcutta": "Asia/Kolkata",
+    "America/Buenos_Aires": "America/Argentina/Buenos_Aires",
+    "America/Catamarca": "America/Argentina/Catamarca",
+    "America/Cordoba": "America/Argentina/Cordoba",
+    "America/Rosario": "America/Argentina/Cordoba",
+    "Pacific/Johnston": "Pacific/Honolulu",
+}
+
+
 @app.get("/api/settings/schedule")
 def get_schedule_settings():
     with get_session() as session:
@@ -310,9 +320,12 @@ def get_schedule_settings():
         if row is None:
             row = AppSettings(id=1)
             session.add(row)
+        pipeline_hour = row.pipeline_hour
+        pipeline_minute = row.pipeline_minute
+        tz = row.timezone
     return {
-        "pipeline_time": f"{row.pipeline_hour:02d}:{row.pipeline_minute:02d}",
-        "timezone": row.timezone,
+        "pipeline_time": f"{pipeline_hour:02d}:{pipeline_minute:02d}",
+        "timezone": tz,
     }
 
 
@@ -323,15 +336,11 @@ class ScheduleSettingsRequest(BaseModel):
 
 @app.put("/api/settings/schedule")
 def update_schedule_settings(body: ScheduleSettingsRequest):
-    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
     parts = body.pipeline_time.split(":")
     if len(parts) != 2:
         raise HTTPException(status_code=400, detail="pipeline_time must be HH:MM")
     hour, minute = int(parts[0]), int(parts[1])
-    try:
-        tz = str(ZoneInfo(body.timezone).key)
-    except (ZoneInfoNotFoundError, KeyError):
-        raise HTTPException(status_code=400, detail=f"Unknown timezone: {body.timezone}")
+    tz = _TZ_ALIASES.get(body.timezone, body.timezone)
     with get_session() as session:
         row = session.get(AppSettings, 1)
         if row is None:
