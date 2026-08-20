@@ -100,17 +100,42 @@
   // snapshot of saved values for dirty tracking — use separate state vars to avoid spread warning
   let savedFormJson = $state("");
   let savedWeeklyScheduleJson = $state(JSON.stringify(blankSchedule()));
+  let customModelAnalysis = $state("");
+  let customModelPlanning = $state("");
+  let savedCustomModelAnalysis = $state("");
+  let savedCustomModelPlanning = $state("");
+
+  const PRESET_MODELS = [
+    "openrouter/anthropic/claude-sonnet-4.6",
+    "openrouter/anthropic/claude-3-haiku-20240307",
+    "openrouter/google/gemini-3-flash-preview",
+    "openrouter/meta-llama/llama-3.1-70b-instruct",
+    "openrouter/moonshotai/kimi-k2.6",
+    "ollama/llama3.2:3b",
+    "ollama/llama3.3:70b",
+    "ollama/qwen2.5:32b",
+    "ollama/mistral-nemo",
+  ];
+
+  const effectiveModelAnalysis = $derived(
+    form.model_analysis === "custom" ? customModelAnalysis : form.model_analysis,
+  );
+  const effectiveModelPlanning = $derived(
+    form.model_planning === "custom" ? customModelPlanning : form.model_planning,
+  );
 
   const isDirty = $derived(
     JSON.stringify(form) !== savedFormJson ||
-    JSON.stringify(weeklySchedule) !== savedWeeklyScheduleJson
+    JSON.stringify(weeklySchedule) !== savedWeeklyScheduleJson ||
+    customModelAnalysis !== savedCustomModelAnalysis ||
+    customModelPlanning !== savedCustomModelPlanning
   );
 
   const modelChanged = $derived.by(() => {
     if (!profile) return false;
     return (
-      form.model_analysis !== (profile.model_analysis ?? "") ||
-      form.model_planning !== (profile.model_planning ?? "")
+      effectiveModelAnalysis !== (profile.model_analysis ?? "") ||
+      effectiveModelPlanning !== (profile.model_planning ?? "")
     );
   });
 
@@ -136,9 +161,21 @@
     return MODEL_COST[model] ?? "—";
   }
 
+  function isValidModelString(s: string): boolean {
+    return s.startsWith("openrouter/") || s.startsWith("ollama/");
+  }
+
+  const customModelAnalysisValid = $derived(
+    form.model_analysis !== "custom" || isValidModelString(customModelAnalysis),
+  );
+  const customModelPlanningValid = $derived(
+    form.model_planning !== "custom" || isValidModelString(customModelPlanning),
+  );
+  const customModelsValid = $derived(customModelAnalysisValid && customModelPlanningValid);
+
   const bothLocal = $derived(
-    form.model_analysis.startsWith("ollama/") &&
-      form.model_planning.startsWith("ollama/"),
+    effectiveModelAnalysis.startsWith("ollama/") &&
+      effectiveModelPlanning.startsWith("ollama/"),
   );
 
   // ── Load ──────────────────────────────────────────────────────────────
@@ -161,6 +198,12 @@
       schedulerStatus = s;
       const knownGoalValues = ["", "ironman_703", "ironman", "marathon", "half_marathon", "olympic_tri", "sprint_tri"];
       const isCustomGoal = !!p.goal_event && !knownGoalValues.includes(p.goal_event);
+      const isCustomAnalysis = !!p.model_analysis && !PRESET_MODELS.includes(p.model_analysis);
+      const isCustomPlanning = !!p.model_planning && !PRESET_MODELS.includes(p.model_planning);
+      if (isCustomAnalysis) customModelAnalysis = p.model_analysis ?? "";
+      if (isCustomPlanning) customModelPlanning = p.model_planning ?? "";
+      savedCustomModelAnalysis = customModelAnalysis;
+      savedCustomModelPlanning = customModelPlanning;
       const f = {
         display_name: p.display_name ?? "",
         goal_event: isCustomGoal ? "custom" : (p.goal_event ?? ""),
@@ -188,8 +231,8 @@
         garmin_password: "",
         swim_equipment: p.swim_equipment ?? "",
         swim_strokes: p.swim_strokes ?? "",
-        model_analysis: p.model_analysis ?? "",
-        model_planning: p.model_planning ?? "",
+        model_analysis: isCustomAnalysis ? "custom" : (p.model_analysis ?? ""),
+        model_planning: isCustomPlanning ? "custom" : (p.model_planning ?? ""),
       };
       form = { ...f };
       customGoalText = isCustomGoal ? (p.goal_event ?? "") : "";
@@ -265,8 +308,8 @@
         swim_max_session_min: form.swim_max_session_min
           ? parseInt(form.swim_max_session_min)
           : null,
-        model_analysis: form.model_analysis,
-        model_planning: form.model_planning,
+        model_analysis: effectiveModelAnalysis,
+        model_planning: effectiveModelPlanning,
         weekly_schedule: (() => {
           const payload: Record<string, { type: string; note?: string }> = {};
           for (const day of DAYS) {
@@ -283,6 +326,8 @@
       userProfile.set(updated);
       savedFormJson = JSON.stringify(form);
       savedWeeklyScheduleJson = JSON.stringify(weeklySchedule);
+      savedCustomModelAnalysis = customModelAnalysis;
+      savedCustomModelPlanning = customModelPlanning;
       saveSuccess = true;
       showToast("Settings saved");
       setTimeout(() => {
@@ -298,6 +343,8 @@
   function discardChanges() {
     form = JSON.parse(savedFormJson);
     weeklySchedule = JSON.parse(savedWeeklyScheduleJson);
+    customModelAnalysis = savedCustomModelAnalysis;
+    customModelPlanning = savedCustomModelPlanning;
   }
 
   // ── Sync / pipeline triggers ──────────────────────────────────────────
@@ -1007,7 +1054,24 @@
               >
               <option value="ollama/mistral-nemo">Mistral Nemo (Fast)</option>
             </optgroup>
+            <optgroup label="✏️ Custom">
+              <option value="custom">Custom…</option>
+            </optgroup>
           </select>
+          {#if form.model_analysis === "custom"}
+            <input
+              type="text"
+              bind:value={customModelAnalysis}
+              placeholder="e.g. openrouter/x-ai/grok-3 or ollama/phi4"
+              class="input-field mt-2"
+              class:border-red-500={customModelAnalysis && !customModelAnalysisValid}
+            />
+            {#if customModelAnalysis && !customModelAnalysisValid}
+              <p class="text-xs text-red-400 mt-1">✗ Must start with <code class="font-mono">openrouter/</code> or <code class="font-mono">ollama/</code></p>
+            {:else if customModelAnalysis && customModelAnalysisValid}
+              <p class="text-xs text-green-500 mt-1">✓ Looks good</p>
+            {/if}
+          {/if}
         </div>
 
         <!-- Planning model -->
@@ -1052,7 +1116,24 @@
               >
               <option value="ollama/mistral-nemo">Mistral Nemo (Fast)</option>
             </optgroup>
+            <optgroup label="✏️ Custom">
+              <option value="custom">Custom…</option>
+            </optgroup>
           </select>
+          {#if form.model_planning === "custom"}
+            <input
+              type="text"
+              bind:value={customModelPlanning}
+              placeholder="e.g. openrouter/x-ai/grok-3 or ollama/phi4"
+              class="input-field mt-2"
+              class:border-red-500={customModelPlanning && !customModelPlanningValid}
+            />
+            {#if customModelPlanning && !customModelPlanningValid}
+              <p class="text-xs text-red-400 mt-1">✗ Must start with <code class="font-mono">openrouter/</code> or <code class="font-mono">ollama/</code></p>
+            {:else if customModelPlanning && customModelPlanningValid}
+              <p class="text-xs text-green-500 mt-1">✓ Looks good</p>
+            {/if}
+          {/if}
         </div>
 
         <!-- Cost estimate -->
@@ -1067,12 +1148,12 @@
             <p class="font-medium text-slate-300">Estimated cost per day:</p>
             <p>
               Analysis: <span class="text-slate-200"
-                >{modelCostLabel(form.model_analysis)}</span
+                >{modelCostLabel(effectiveModelAnalysis)}</span
               >
             </p>
             <p>
               Planning: <span class="text-slate-200"
-                >{modelCostLabel(form.model_planning)}</span
+                >{modelCostLabel(effectiveModelPlanning)}</span
               >
             </p>
           {/if}
@@ -1459,7 +1540,7 @@
         >
         <button
           onclick={saveProfile}
-          disabled={saving}
+          disabled={saving || !customModelsValid}
           class="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition disabled:opacity-60"
         >
           {#if saving}
