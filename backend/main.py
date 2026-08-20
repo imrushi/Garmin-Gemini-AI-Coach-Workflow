@@ -323,10 +323,15 @@ class ScheduleSettingsRequest(BaseModel):
 
 @app.put("/api/settings/schedule")
 def update_schedule_settings(body: ScheduleSettingsRequest):
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
     parts = body.pipeline_time.split(":")
     if len(parts) != 2:
         raise HTTPException(status_code=400, detail="pipeline_time must be HH:MM")
     hour, minute = int(parts[0]), int(parts[1])
+    try:
+        tz = str(ZoneInfo(body.timezone).key)
+    except (ZoneInfoNotFoundError, KeyError):
+        raise HTTPException(status_code=400, detail=f"Unknown timezone: {body.timezone}")
     with get_session() as session:
         row = session.get(AppSettings, 1)
         if row is None:
@@ -334,8 +339,8 @@ def update_schedule_settings(body: ScheduleSettingsRequest):
             session.add(row)
         row.pipeline_hour = hour
         row.pipeline_minute = minute
-        row.timezone = body.timezone
-    nightly_scheduler.reschedule(hour, minute, body.timezone)
+        row.timezone = tz
+    nightly_scheduler.reschedule(hour, minute, tz)
     return {"ok": True}
 
 
