@@ -7,6 +7,7 @@ import type {
   KpiMetrics,
   OverridePrompt,
   ReadinessReport,
+  ScheduleSettings,
   SchedulerStatus,
   TrainingPlan,
   TrainingSession,
@@ -279,6 +280,17 @@ export async function triggerPipeline(userId: string): Promise<{ triggered: bool
 
 export async function clearCurrentPlan(userId: string): Promise<{ cleared: boolean; plans_affected: number; message: string }> {
   return apiFetch(`/plans/current/${userId}`, { method: 'DELETE' })
+}
+
+export async function getScheduleSettings(): Promise<ScheduleSettings> {
+  return apiFetch('/settings/schedule')
+}
+
+export async function updateScheduleSettings(settings: ScheduleSettings): Promise<{ ok: boolean }> {
+  return apiFetch('/settings/schedule', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  })
 }
 
 export async function resetAllData(userId: string): Promise<{ reset: boolean; deleted: Record<string, number>; message: string; next_steps: string[] }> {

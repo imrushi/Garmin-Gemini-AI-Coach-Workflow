@@ -19,6 +19,7 @@ from db.feedback_writer import get_todays_override, save_check_in
 from db.model import (
     AgentContext,
     AgentRun,
+    AppSettings,
     Base,
     DailyMetric,
     FitnessLevelHistory,
@@ -300,6 +301,42 @@ async def trigger_sync(body: SchedulerTriggerRequest):
 async def trigger_pipeline(body: SchedulerTriggerRequest):
     asyncio.create_task(nightly_scheduler.pipeline_single_user(body.user_id))
     return {"triggered": True}
+
+
+@app.get("/api/settings/schedule")
+def get_schedule_settings():
+    with get_session() as session:
+        row = session.get(AppSettings, 1)
+        if row is None:
+            row = AppSettings(id=1)
+            session.add(row)
+    return {
+        "pipeline_time": f"{row.pipeline_hour:02d}:{row.pipeline_minute:02d}",
+        "timezone": row.timezone,
+    }
+
+
+class ScheduleSettingsRequest(BaseModel):
+    pipeline_time: str  # "HH:MM"
+    timezone: str
+
+
+@app.put("/api/settings/schedule")
+def update_schedule_settings(body: ScheduleSettingsRequest):
+    parts = body.pipeline_time.split(":")
+    if len(parts) != 2:
+        raise HTTPException(status_code=400, detail="pipeline_time must be HH:MM")
+    hour, minute = int(parts[0]), int(parts[1])
+    with get_session() as session:
+        row = session.get(AppSettings, 1)
+        if row is None:
+            row = AppSettings(id=1)
+            session.add(row)
+        row.pipeline_hour = hour
+        row.pipeline_minute = minute
+        row.timezone = body.timezone
+    nightly_scheduler.reschedule(hour, minute, body.timezone)
+    return {"ok": True}
 
 
 @app.get("/api/profile/{user_id}")

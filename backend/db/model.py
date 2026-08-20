@@ -293,6 +293,18 @@ class AgentContext(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+# ── App Settings ────────────────────────────────────────────────────────
+
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    pipeline_hour: Mapped[int] = mapped_column(Integer, default=6)
+    pipeline_minute: Mapped[int] = mapped_column(Integer, default=45)
+    timezone: Mapped[str] = mapped_column(String, default="Asia/Kolkata")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 # ── Engine & Session ─────────────────────────────────────────────────────
 
 _engine: Engine | None = None

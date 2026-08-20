@@ -1,13 +1,13 @@
 import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from agents.orchestrator import orchestrator
 from config import settings
-from db.model import DailyMetric, User, UserProfile, get_session
+from db.model import AppSettings, DailyMetric, User, UserProfile, get_session
 from db.writer import save_daily_metrics, save_workouts
 from ingestion.garmin_client import GarminClient
 from ingestion.normaliser import normalise_day
@@ -15,46 +15,84 @@ from ingestion.zone_utils import fetch_zones_for_activities
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_PIPELINE_HOUR = 6
+_DEFAULT_PIPELINE_MINUTE = 45
+_DEFAULT_TIMEZONE = "Asia/Kolkata"
+
+
+def _offset_time(hour: int, minute: int, delta_minutes: int) -> tuple[int, int]:
+    dt = datetime(2000, 1, 1, hour, minute) - timedelta(minutes=delta_minutes)
+    return dt.hour, dt.minute
+
+
+def _load_schedule() -> tuple[int, int, str]:
+    with get_session() as session:
+        row = session.get(AppSettings, 1)
+        if row is None:
+            row = AppSettings(
+                id=1,
+                pipeline_hour=_DEFAULT_PIPELINE_HOUR,
+                pipeline_minute=_DEFAULT_PIPELINE_MINUTE,
+                timezone=_DEFAULT_TIMEZONE,
+            )
+            session.add(row)
+        return row.pipeline_hour, row.pipeline_minute, row.timezone
+
 
 class NightlyScheduler:
     def __init__(self) -> None:
-        self.scheduler = AsyncIOScheduler(timezone="Asia/Kolkata")
+        self.scheduler = AsyncIOScheduler(timezone=_DEFAULT_TIMEZONE)
         self.is_running = False
 
-    def start(self) -> None:
+    def _schedule_jobs(self, hour: int, minute: int, tz: str) -> None:
+        pre_sync_h, pre_sync_m = _offset_time(hour, minute, 30)
+        morning_sync_h, morning_sync_m = _offset_time(hour, minute, 15)
+
         self.scheduler.add_job(
             self.run_garmin_sync_range,
             trigger="cron",
-            hour=5,
-            minute=0,
+            hour=pre_sync_h,
+            minute=pre_sync_m,
             id="garmin_sync",
             replace_existing=True,
             misfire_grace_time=3600,
+            timezone=tz,
         )
         self.scheduler.add_job(
             self.run_garmin_sync_today,
             trigger="cron",
-            hour=6,
-            minute=30,
+            hour=morning_sync_h,
+            minute=morning_sync_m,
             id="garmin_sync_today",
             replace_existing=True,
             misfire_grace_time=3600,
+            timezone=tz,
         )
         self.scheduler.add_job(
             self.run_daily_pipeline,
             trigger="cron",
-            hour=6,
-            minute=45,
+            hour=hour,
+            minute=minute,
             id="daily_pipeline",
             replace_existing=True,
             misfire_grace_time=3600,
+            timezone=tz,
         )
+        logger.info(
+            "Scheduler jobs set: pre-sync %02d:%02d, morning sync %02d:%02d, pipeline %02d:%02d (%s)",
+            pre_sync_h, pre_sync_m, morning_sync_h, morning_sync_m, hour, minute, tz,
+        )
+
+    def start(self) -> None:
+        hour, minute, tz = _load_schedule()
+        self.scheduler = AsyncIOScheduler(timezone=tz)
+        self._schedule_jobs(hour, minute, tz)
         self.scheduler.start()
         self.is_running = True
-        logger.info(
-            "Scheduler started: Garmin pre-sync at 05:00 IST, "
-            "morning sync at 06:30 IST, pipeline at 06:45 IST"
-        )
+
+    def reschedule(self, hour: int, minute: int, tz: str) -> None:
+        self._schedule_jobs(hour, minute, tz)
+        logger.info("Scheduler rescheduled to pipeline %02d:%02d (%s)", hour, minute, tz)
 
     def stop(self) -> None:
         self.scheduler.shutdown(wait=False)

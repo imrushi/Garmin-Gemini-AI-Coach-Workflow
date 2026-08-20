@@ -351,6 +351,11 @@ export interface SchedulerStatus {
   }>
 }
 
+export interface ScheduleSettings {
+  pipeline_time: string  // "HH:MM"
+  timezone: string
+}
+
 // ── Stats helper functions ────────────────────────────────────────────────
 
 export function trendIcon(trend: string): string {

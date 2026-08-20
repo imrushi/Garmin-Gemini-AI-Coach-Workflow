@@ -18,8 +18,10 @@
     triggerPipeline,
     clearCurrentPlan,
     resetAllData,
+    getScheduleSettings,
+    updateScheduleSettings,
   } from "$lib/api";
-  import type { FitnessLevelHistoryItem, SchedulerStatus, UserProfile } from "$lib/types";
+  import type { FitnessLevelHistoryItem, ScheduleSettings, SchedulerStatus, UserProfile } from "$lib/types";
   import {
     User,
     Target,
@@ -187,11 +189,13 @@
       return;
     }
     try {
-      const [p, s, hist] = await Promise.all([
+      const [p, s, hist, schedSettings] = await Promise.all([
         getProfile(uid),
         getSchedulerStatus().catch(() => null),
         getFitnessLevelHistory(uid, 10).catch(() => []),
+        getScheduleSettings().catch(() => null),
       ]);
+      if (schedSettings) schedulePipelineTime = schedSettings.pipeline_time;
       fitnessHistory = hist;
       profile = p;
       userProfile.set(p);
@@ -345,6 +349,24 @@
     weeklySchedule = JSON.parse(savedWeeklyScheduleJson);
     customModelAnalysis = savedCustomModelAnalysis;
     customModelPlanning = savedCustomModelPlanning;
+  }
+
+  // ── Schedule time ─────────────────────────────────────────────────────
+  let schedulePipelineTime = $state("06:45");
+  let scheduleSaving = $state(false);
+
+  async function handleSaveSchedule() {
+    scheduleSaving = true;
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      await updateScheduleSettings({ pipeline_time: schedulePipelineTime, timezone: tz });
+      schedulerStatus = await getSchedulerStatus();
+      showToast("Schedule updated — jobs rescheduled");
+    } catch {
+      showToast("Failed to update schedule", "error");
+    } finally {
+      scheduleSaving = false;
+    }
   }
 
   // ── Sync / pipeline triggers ──────────────────────────────────────────
@@ -1197,6 +1219,31 @@
 
     {#if activeSection === "sync"}
       <div class="px-5 pb-6 border-t border-slate-700 pt-5 space-y-5">
+        <!-- Pipeline time -->
+        <div class="space-y-2">
+          <p class="label-sm">Pipeline Time</p>
+          <p class="text-xs text-slate-400">Daily AI analysis runs at this time. Garmin syncs start 30 min and 15 min before.</p>
+          <div class="flex items-center gap-3">
+            <input
+              type="time"
+              bind:value={schedulePipelineTime}
+              class="input-field w-32"
+            />
+            <button
+              onclick={handleSaveSchedule}
+              disabled={scheduleSaving}
+              class="btn-secondary flex items-center gap-1.5 text-sm"
+            >
+              {#if scheduleSaving}
+                <span class="w-3 h-3 rounded-full border border-current border-t-transparent animate-spin"></span>
+              {:else}
+                <Save size={14} />
+              {/if}
+              Save
+            </button>
+          </div>
+        </div>
+
         <!-- Scheduler status -->
         <div class="bg-slate-700/50 rounded-lg p-4 space-y-3">
           <div class="flex items-center justify-between">
@@ -1233,8 +1280,10 @@
                 <div class="flex justify-between">
                   <span
                     >{job.id === "garmin_sync"
-                      ? "🔄 Garmin Sync"
-                      : "🤖 AI Pipeline"}</span
+                      ? "🔄 Pre-sync"
+                      : job.id === "garmin_sync_today"
+                        ? "🔄 Morning Sync"
+                        : "🤖 AI Pipeline"}</span
                   >
                   <span class="text-slate-300">
                     {job.next_run
