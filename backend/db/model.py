@@ -85,6 +85,7 @@ class UserProfile(Base):
     model_planning: Mapped[str] = mapped_column(
         String, default="openrouter/anthropic/claude-sonnet-4.6"
     )
+    openrouter_max_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     goal_start_override: Mapped[date | None] = mapped_column(Date, nullable=True)
     fitness_level_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")

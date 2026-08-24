@@ -86,6 +86,7 @@
     swim_strokes: "",
     model_analysis: "",
     model_planning: "",
+    openrouter_max_tokens: "" as string | number,
   });
 
   // ── Weekly schedule state ─────────────────────────────────────────────
@@ -237,6 +238,7 @@
         swim_strokes: p.swim_strokes ?? "",
         model_analysis: isCustomAnalysis ? "custom" : (p.model_analysis ?? ""),
         model_planning: isCustomPlanning ? "custom" : (p.model_planning ?? ""),
+        openrouter_max_tokens: p.openrouter_max_tokens ?? "",
       };
       form = { ...f };
       customGoalText = isCustomGoal ? (p.goal_event ?? "") : "";
@@ -314,6 +316,7 @@
           : null,
         model_analysis: effectiveModelAnalysis,
         model_planning: effectiveModelPlanning,
+        openrouter_max_tokens: form.openrouter_max_tokens !== "" ? Number(form.openrouter_max_tokens) : null,
         weekly_schedule: (() => {
           const payload: Record<string, { type: string; note?: string }> = {};
           for (const day of DAYS) {
@@ -1179,6 +1182,22 @@
               >
             </p>
           {/if}
+        </div>
+
+        <!-- Max tokens (OpenRouter) -->
+        <div class="space-y-1">
+          <label for="openrouter-max-tokens" class="label-sm">Max Tokens (OpenRouter)</label>
+          <input
+            id="openrouter-max-tokens"
+            type="number"
+            min="256"
+            max="32768"
+            step="256"
+            bind:value={form.openrouter_max_tokens}
+            placeholder={String(profile?.openrouter_max_tokens_default ?? 2048)}
+            class="input-field"
+          />
+          <p class="text-xs text-slate-500">Overrides DEFAULT_MAX_TOKENS from .env. Leave blank to use env default.</p>
         </div>
 
         <!-- Context transfer warning -->

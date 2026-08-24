@@ -173,6 +173,8 @@ export interface UserProfile {
   swim_max_session_min: number | null
   model_analysis: string
   model_planning: string
+  openrouter_max_tokens: number | null
+  openrouter_max_tokens_default: number
   weekly_schedule: string | null
 }
 

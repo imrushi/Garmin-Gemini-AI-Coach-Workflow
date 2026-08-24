@@ -46,6 +46,7 @@ class ModelClient:
         system: str | None = None,
         user_id: str | None = None,
         session_id: str | None = None,
+        max_tokens: int | None = None,
     ) -> ModelResponse:
         logger.debug(
             "Calling %s model=%s", self.config.backend.value, self.config.model_id
@@ -53,7 +54,7 @@ class ModelClient:
         start = time.time()
         try:
             if self.config.backend == ModelBackend.OPENROUTER:
-                resp = await self._call_openrouter(messages, json_mode, system, user_id, session_id)
+                resp = await self._call_openrouter(messages, json_mode, system, user_id, session_id, max_tokens)
             else:
                 resp = await self._call_ollama(messages, json_mode, system)
         except httpx.HTTPError as exc:
@@ -66,6 +67,7 @@ class ModelClient:
     async def _call_openrouter(
         self, messages: list[dict], json_mode: bool, system: str | None = None,
         user_id: str | None = None, session_id: str | None = None,
+        max_tokens: int | None = None,
     ) -> ModelResponse:
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
@@ -79,7 +81,7 @@ class ModelClient:
         body: dict = {
             "model": self.config.model_id,
             "messages": full_messages,
-            "max_tokens": settings.DEFAULT_MAX_TOKENS,
+            "max_tokens": max_tokens if max_tokens is not None else settings.DEFAULT_MAX_TOKENS,
         }
         if "claude" in self.config.model_id.lower():
             body["provider"] = {"order": ["Anthropic"], "allow_fallbacks": False}
